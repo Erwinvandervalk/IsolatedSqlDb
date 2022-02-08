@@ -13,12 +13,20 @@ using Microsoft.Extensions.Logging;
 
 namespace IsolatedSqlDb
 {
+    /// <summary>
+    /// Helps to create isolated SQL Localdb databases for testing purposes. 
+    /// </summary>
     public class IsolatedDatabaseManager
     {
         private readonly IsolatedDatabaseSettings _settings;
         private readonly ILogger<IsolatedDatabaseManager> _logger;
         private bool _initialized;
 
+        /// <summary>
+        /// Creates a manager. 
+        /// </summary>
+        /// <param name="settings"></param>
+        /// <param name="logger"></param>
         public IsolatedDatabaseManager(
             IsolatedDatabaseSettings settings, 
             ILogger<IsolatedDatabaseManager> logger)
@@ -27,6 +35,11 @@ namespace IsolatedSqlDb
             _logger = logger;
         }
 
+        /// <summary>
+        /// Initialize the system. Starts the sql localdb instance. 
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         public async Task Initialize(CancellationToken ct)
         {
             if (_initialized)
@@ -76,6 +89,12 @@ namespace IsolatedSqlDb
             _logger.LogInformation($"instance: '{_settings.InstanceName}' initialized. It took: {stopwatch.Elapsed}");
         }
 
+        /// <summary>
+        /// Creates an isolated database by copying and attaching the mdb files. 
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
         public async Task<IsolatedDatabase> CreateIsolatedDatabase(CancellationToken ct)
         {
             if (!File.Exists(PreparedMdf)) throw new InvalidOperationException($"MDF '{PreparedMdf}' is not yet prepared. Invoke Prepare()");
@@ -85,8 +104,8 @@ namespace IsolatedSqlDb
 
             _logger.LogInformation("Attaching database {database}", databaseName);
 
-            var targetMdf = _settings.Path.Concat(databaseName + ".mdf");
-            var targetLdf = _settings.Path.Concat(databaseName + "_log.ldf");
+            var targetMdf = _settings.RootedPath.Concat(databaseName + ".mdf");
+            var targetLdf = _settings.RootedPath.Concat(databaseName + "_log.ldf");
 
             File.Copy(PreparedMdf, targetMdf, true);
             File.Copy(PreparedLdf, targetLdf, true);
@@ -113,24 +132,29 @@ namespace IsolatedSqlDb
             return $"Data Source=(LocalDb)\\{_settings.InstanceName};Initial Catalog={databaseName};Integrated Security = SSPI;";
         }
 
-
-        public async Task Prepare(Func<IsolatedDatabase, CancellationToken, Task> createSchema, CancellationToken ct)
+        /// <summary>
+        /// Prepares the isolated databases
+        /// </summary>
+        /// <param name="prepareDatabase">Action that you can use to create a schema and seed with data. </param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        public async Task Prepare(Func<IsolatedDatabase, CancellationToken, Task> prepareDatabase, CancellationToken ct)
         {
             var databaseName = BuildNewDatabaseName();
             await Initialize(ct);
 
-            _settings.Path.EnsureExists();
+            _settings.RootedPath.EnsureExists();
 
-            string sourceMdf = _settings.Path.Concat(databaseName + ".mdf");
-            string sourceLdf = _settings.Path.Concat(databaseName + "_log.ldf");
+            string sourceMdf = _settings.RootedPath.Concat(databaseName + ".mdf");
+            string sourceLdf = _settings.RootedPath.Concat(databaseName + "_log.ldf");
 
             var createDatabase = $@"
                 CREATE DATABASE [{databaseName}]
                 ON PRIMARY (
                     NAME = N'{databaseName}',
                     FILENAME = N'{sourceMdf}',
-                    SIZE = 1MB,
-                    FILEGROWTH = 1MB
+                    SIZE = {_settings.InitialSizeMb}MB,
+                    FILEGROWTH = {_settings.InitialGrowthMb}MB
                     )
                     LOG ON (
                     NAME = N'{databaseName}_log',
@@ -145,7 +169,7 @@ namespace IsolatedSqlDb
 
             var isolatedDatabase = new IsolatedDatabase(_logger, _settings, BuildConnectionString(databaseName));
             await isolatedDatabase.WaitUntilAvailable(ct);
-            await createSchema(isolatedDatabase, ct);
+            await prepareDatabase(isolatedDatabase, ct);
 
             _logger.LogDebug("Detaching database {database}", databaseName);
             using (var connection = new SqlConnection(_settings.MasterConnectionString))
@@ -177,11 +201,11 @@ namespace IsolatedSqlDb
 
         private string BuildNewDatabaseName()
         {
-            return $"{_settings.DatabaseName}.{DateTime.Now:yyyyMMddhhmmss}.{DateTime.Now.Ticks}";
+            return $"{_settings.SystemName}.{DateTime.Now:yyyyMMddhhmmss}.{DateTime.Now.Ticks}";
         }
 
-        private RootedPath PreparedMdf => _settings.Path.Concat(_settings.DatabaseName + "_log.ldf");
+        private RootedPath PreparedMdf => _settings.RootedPath.Concat(_settings.SystemName + "_log.ldf");
 
-        private RootedPath PreparedLdf => _settings.Path.Concat(_settings.DatabaseName + ".mdf");
+        private RootedPath PreparedLdf => _settings.RootedPath.Concat(_settings.SystemName + ".mdf");
     }
 }

@@ -3,7 +3,7 @@
 namespace IsolatedSqlDb.Path
 {
 
-    public class RelativePath
+    internal class RelativePath
     {
         
 

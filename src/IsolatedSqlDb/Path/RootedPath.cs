@@ -3,7 +3,7 @@ using System.IO;
 
 namespace IsolatedSqlDb.Path
 {
-    public class RootedPath
+    internal class RootedPath
     {
         private readonly string _path;
 
@@ -57,6 +57,10 @@ namespace IsolatedSqlDb.Path
 
         public static implicit operator string(RootedPath rootedPath) => rootedPath.ToString();
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public override string ToString() => _path;
         
     }

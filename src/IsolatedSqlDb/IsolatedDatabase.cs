@@ -9,6 +9,10 @@ using Microsoft.Extensions.Logging;
 
 namespace IsolatedSqlDb
 {
+    /// <summary>
+    /// An instance of a sql database that's isolated for testing purposes.
+    /// Disposing of this instance will delete it. 
+    /// </summary>
     public class IsolatedDatabase : IAsyncDisposable, IDisposable
     {
         private readonly ILogger _logger;
@@ -19,8 +23,19 @@ namespace IsolatedSqlDb
             RegexOptions.Multiline
             | RegexOptions.IgnoreCase
             | RegexOptions.Compiled);
+
+        /// <summary>
+        /// The connection string for this database instance. 
+        /// </summary>
         public string ConnectionString { get; }
 
+        /// <summary>
+        /// Creates an instance. 
+        /// </summary>
+        /// <param name="logger"></param>
+        /// <param name="settings"></param>
+        /// <param name="connectionString"></param>
+        /// <param name="databaseName"></param>
         public IsolatedDatabase(ILogger logger, IsolatedDatabaseSettings settings, string connectionString,
             string databaseName) : this(logger, settings, connectionString)
         {
@@ -35,6 +50,12 @@ namespace IsolatedSqlDb
         }
 
 
+        /// <summary>
+        /// Allows you to execute sql blocks. 
+        /// </summary>
+        /// <param name="command"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         public async Task ExecuteSql(string command, CancellationToken ct)
         {
             using (var connection = await OpenConnection(ct))
@@ -65,6 +86,12 @@ namespace IsolatedSqlDb
 
         }
 
+        /// <summary>
+        /// Attempts to make a connection to the db. In rare occurances, it might take a while
+        /// to become available. 
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
         public async Task WaitUntilAvailable(CancellationToken ct)
         {
             for (var i = 0; i <= 3; i++)
@@ -96,8 +123,20 @@ namespace IsolatedSqlDb
             return conn;
         }
 
+        private bool _dropped;
+
+        /// <summary>
+        /// Will drop this database. 
+        /// </summary>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
         public async Task DropDatabase(CancellationToken ct)
         {
+            if (_dropped) return;
+
+            _dropped = true;
+
             if (_databaseName == null) throw new InvalidOperationException("Cannot drop database when name is null");
 
             _logger.LogInformation("Db -> Deleting database {dbName}", _databaseName);
@@ -114,8 +153,8 @@ END", ct1);
                 });
 
             
-            await PerformWithRetry(3, ct, async (_) => File.Delete(_settings.Path.Concat(_databaseName + ".mdf")));
-            await PerformWithRetry(3, ct, async (_) => File.Delete(_settings.Path.Concat(_databaseName + "_log.ldf")));
+            await PerformWithRetry(3, ct, async (_) => File.Delete(_settings.RootedPath.Concat(_databaseName + ".mdf")));
+            await PerformWithRetry(3, ct, async (_) => File.Delete(_settings.RootedPath.Concat(_databaseName + "_log.ldf")));
         }
 
         private async Task PerformWithRetry(int times, CancellationToken ct, Func<CancellationToken, Task> a)
@@ -138,6 +177,10 @@ END", ct1);
 
         private bool _disposed;
 
+        /// <summary>
+        /// Disposes and deletes the database. This waits until the db is actually deleted. 
+        /// </summary>
+        /// <returns></returns>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)
@@ -151,12 +194,19 @@ END", ct1);
                 });
         }
 
+        /// <summary>
+        /// Deletes the database. does not wait for the db actually to be deleted. 
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
                 return;
 
             _disposed = true;
+
+            // Run the 'dropping' on a different thread. It's not awaited so it may not complete. 
+            // The reason for this is that dropping it takes time. Dont' want to wait for this.
+            // Disk space is cheap (if you clean up regularly), time is not. 
 
             Task.Run(async () =>
                 {
