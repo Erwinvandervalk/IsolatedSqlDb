@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <Authors>Erwin van der Valk</Authors>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <BUILD_NUMBER Condition="'$(GITHUB_RUN_NUMBER)' == ''">0</BUILD_NUMBER>
+    <DebugType>portable</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+	  <NoWarn>1591</NoWarn>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+  </PropertyGroup>
+    <ItemGroup>
+    <PackageReference Include="MinVer" Version="2.5.0" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

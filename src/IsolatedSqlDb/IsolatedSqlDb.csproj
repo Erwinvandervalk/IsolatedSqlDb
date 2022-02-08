@@ -1,7 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netcoreapp3.1</TargetFrameworks>
+		<PackageId>IsolatedSqlDb</PackageId>
+		
+	    <PackageProjectUrl>https://github.com/erwinvandervalk/IsolatedSqlDb/</PackageProjectUrl>
+    <PackageTags></PackageTags>
+    <RepositoryUrl>https://github.com/erwinvandervalk/IsolatedSqlDb/</RepositoryUrl>
+    <RepositoryType></RepositoryType>
+    <PackageLicenseUrl>https://opensource.org/licenses/MIT/</PackageLicenseUrl>
+    
+		<TargetFrameworks>netcoreapp3.1;net6.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 	  <NoWarn>1701;1702;1998</NoWarn>
 		
