@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - v*
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    env: 
+      GITHUB_RUN_NUMBER: $(GITHUB_RUN_NUMBER)
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: | 
+          3.1.x
+          6.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+
+    - name: Pack
+      run: dotnet pack --configuration Release --output .    
+
+    - name: Push
+      run: |
+        file=$(find . -type f -name "*.nupkg")
+        dotnet nuget push $file --source https://api.nuget.org/v3/index.json --api-key ${NUGET_TOKEN}
+      env:
+        NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
