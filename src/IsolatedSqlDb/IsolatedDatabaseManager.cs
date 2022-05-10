@@ -101,12 +101,10 @@ namespace IsolatedSqlDb
             if (!File.Exists(PreparedLdf)) throw new InvalidOperationException($"LDF '{PreparedLdf}' is not yet prepared. Invoke Prepare()");
 
             const int retry = 3;
-            for (int i = 1; i == retry; i++)
+            for (int i = 0; i <= retry; i++)
             {
                 try
                 {
-
-
                     var databaseName = BuildNewDatabaseName();
 
                     _logger.LogInformation("Attaching database {database}", databaseName);
