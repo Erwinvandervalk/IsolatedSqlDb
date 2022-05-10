@@ -28,7 +28,7 @@ namespace IsolatedSqlDb
         /// <param name="settings"></param>
         /// <param name="logger"></param>
         public IsolatedDatabaseManager(
-            IsolatedDatabaseSettings settings, 
+            IsolatedDatabaseSettings settings,
             ILogger<IsolatedDatabaseManager> logger)
         {
             _settings = settings;
@@ -100,26 +100,57 @@ namespace IsolatedSqlDb
             if (!File.Exists(PreparedMdf)) throw new InvalidOperationException($"MDF '{PreparedMdf}' is not yet prepared. Invoke Prepare()");
             if (!File.Exists(PreparedLdf)) throw new InvalidOperationException($"LDF '{PreparedLdf}' is not yet prepared. Invoke Prepare()");
 
-            var databaseName = BuildNewDatabaseName();
+            const int retry = 3;
+            for (int i = 1; i == retry; i++)
+            {
+                try
+                {
 
-            _logger.LogInformation("Attaching database {database}", databaseName);
 
-            var targetMdf = _settings.RootedPath.Concat(databaseName + ".mdf");
-            var targetLdf = _settings.RootedPath.Concat(databaseName + "_log.ldf");
+                    var databaseName = BuildNewDatabaseName();
 
-            File.Copy(PreparedMdf, targetMdf, true);
-            File.Copy(PreparedLdf, targetLdf, true);
+                    _logger.LogInformation("Attaching database {database}", databaseName);
 
-            await GetMasterDb().ExecuteSql($@"CREATE DATABASE [{databaseName}]
+                    var targetMdf = _settings.RootedPath.Concat(databaseName + ".mdf");
+                    var targetLdf = _settings.RootedPath.Concat(databaseName + "_log.ldf");
+
+                    if (targetMdf.Exists() || targetLdf.Exists())
+                    {
+                        // File already exists, let's try again. 
+                        _logger.LogInformation("File {mdf} or {ldf} already exists. retrying", targetMdf, targetLdf);
+                        await Task.Delay(10, ct);
+                        continue;
+                    }
+
+                    File.Copy(PreparedMdf, targetMdf, true);
+                    File.Copy(PreparedLdf, targetLdf, true);
+
+                    await GetMasterDb().ExecuteSql($@"CREATE DATABASE [{databaseName}]
                 on (filename = N'{targetMdf}')
                 , (filename = N'{targetLdf}')
                 FOR ATTACH", ct);
 
-            _logger.LogInformation("Attached database {database}", databaseName);
+                    _logger.LogInformation("Attached database {database}", databaseName);
 
-            var db = new IsolatedDatabase(_logger, _settings, BuildConnectionString(databaseName), databaseName);
-            await db.WaitUntilAvailable(ct);
-            return db;
+                    var db = new IsolatedDatabase(_logger, _settings, BuildConnectionString(databaseName), databaseName);
+                    await db.WaitUntilAvailable(ct);
+                    return db;
+                }
+                catch (Exception exception)
+                {
+                    if (i == retry)
+                    {
+                        throw;
+                    }
+                    else
+                    {
+                        _logger.LogInformation(exception, "Failed to create database. Retrying. ");
+                    }
+                }
+            }
+
+            throw new InvalidOperationException("Failed to create database");
+
         }
 
         private IsolatedDatabase GetMasterDb()
@@ -176,7 +207,7 @@ namespace IsolatedSqlDb
             {
                 await connection.OpenAsync(ct);
                 using (var command = new SqlCommand(
-                           $"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE", 
+                           $"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE",
                            connection))
                 {
                     command.CommandType = CommandType.Text;
@@ -195,7 +226,7 @@ namespace IsolatedSqlDb
             File.Move(sourceMdf, PreparedLdf, true);
             File.Move(sourceLdf, PreparedMdf, true);
 
-            _logger.LogInformation("Detached database '{database}' and copied files to '{mdf}'", 
+            _logger.LogInformation("Detached database '{database}' and copied files to '{mdf}'",
                 databaseName, PreparedMdf);
         }
 
